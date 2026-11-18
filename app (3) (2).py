@@ -15,7 +15,7 @@ def component_directory(html_path, modified_at):
     return str(folder)
 
 
-st.set_page_config(page_title="HEDEF AVM KOTA TAKİP", page_icon="🏆", layout="wide")
+st.set_page_config(page_title="HEDEF AVM ŞİKAYET PANELİ", page_icon="🏆", layout="wide")
 st.html('''
 <style>
 header[data-testid="stHeader"], footer, #MainMenu, .stDeployButton { display:none; }
