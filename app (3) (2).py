@@ -3,7 +3,7 @@ from tempfile import mkdtemp
 
 import requests
 import streamlit as st
-from streamlit.components.v1 import declare_component
+from panel_component import register_panel
 
 ROOT = Path(__file__).resolve().parent
 ENDPOINT = 'https://script.google.com/macros/s/AKfycbyii3UgQxR3Y3DUdPO6RO3S8Y8GS3DwIlx267txMHHnWNKE_WO6XOOG_D3mS5vtn91G/exec'
@@ -33,7 +33,7 @@ if not html.is_file():
 if "window.streamlitPanel = request" not in html.read_text(encoding="utf-8-sig"):
     st.error("Bu HTML dosyası Streamlit bağlantısını içermiyor. Paketteki index.html dosyasını yükleyin.")
     st.stop()
-panel = declare_component("hedef_panel", path=component_directory(str(html), html.stat().st_mtime_ns))
+panel = register_panel(component_directory(str(html), html.stat().st_mtime_ns))
 response = st.session_state.get("panel_response")
 event = panel(response=response, key="hedef_panel", default=None)
 if isinstance(event, dict) and isinstance(event.get("id"), str):

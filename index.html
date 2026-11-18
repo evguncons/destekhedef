@@ -324,45 +324,10 @@ function clearViewLoading(){clearTimeout(viewLoadingTimer);$('viewLoading').hidd
 function startViewLoading(){if(state.view==='overview'){state.analytics=null;$('exportButton').disabled=true;$('pdfButton').disabled=true;}clearViewLoading();const view=$(state.view+'View');if(!view||$('app').hidden)return;viewLoadingStarted=performance.now();view.prepend($('viewLoading'));$('viewLoading').hidden=false;$('loadingTitle').textContent=state.view==='overview'?'Rapor hazırlanıyor':'Veriler güncelleniyor';$('loadingDetail').textContent=state.view==='overview'?'Seçtiğiniz filtreler analiz ediliyor…':state.view==='records'?'Şikayet kayıtları getiriliyor…':state.view==='sales'?'Teslimat kayıtları getiriliyor…':state.view==='staff'?'Personel ve iş yükü getiriliyor…':state.view==='tasks'?'Size atanan görevler getiriliyor…':'İşlem geçmişi getiriliyor…';view.classList.add('is-loading');view.setAttribute('aria-busy','true');for(const child of view.querySelectorAll('.summary-grid,.chart-grid,.lower-grid,.insight,.table-wrap,.pagination')){child.inert=true;child.setAttribute('data-loading-lock','')}}
 function finishViewLoading(seq){if(seq!==state.seq)return;clearTimeout(viewLoadingTimer);viewLoadingTimer=setTimeout(()=>{if(seq===state.seq)clearViewLoading()},Math.max(0,340-(performance.now()-viewLoadingStarted)))}
 
-const BACKGROUND_IMPORT_ACTIONS=new Set(['beginImport','importBatch','beginDeliveryImport','importDeliveryBatch','completeDeliveryImport','beginPurchaseImport','importPurchaseBatch','completePurchaseImport']);
-async function backgroundImportRpc(action,payload){
- const jobId='job-'+crypto.randomUUID(),token=state.token,start=Date.now();
- const req={action:'executeImportJob',token,payload:{jobId,action,payload}};
- const encoded=JSON.stringify(req);
- if(new TextEncoder().encode(encoded).length>256000)return rpc(action,payload,true);
- let submitted=false,failures=0;
- while(Date.now()-start<540000){
-  if(state.token!==token)throw Error('Oturum değişti. Aynı dosyayla yeniden deneyin.');
-  if(!submitted){
-   try{const r=await fetch('/.netlify/functions/import-background',{method:'POST',headers:{'Content-Type':'application/json'},body:encoded,signal:AbortSignal.timeout(20000)});if(r.status===413)return rpc(action,payload,true);if(r.status!==202)throw Error('Arka plan aktarımı başlatılamadı (HTTP '+r.status+'). API fonksiyonlarını güncelleyin.');submitted=true;}
-   catch(e){if(++failures>=3)throw e;await new Promise(r=>setTimeout(r,2000));continue;}
-  }
-  await new Promise(r=>setTimeout(r,1000));
-  let status;
-  try{status=await rpc('importJobStatus',{jobId});failures=0;}
-  catch(e){if(['UNAUTHORIZED','SESSION_EXPIRED','AUTH_REQUIRED'].includes(e.code))throw e;if(++failures>=6)throw e;continue;}
-  if(status.state==='done'){
-   if(!status.result?.ok){const error=Error(status.result?.error?.message||'Aktarım tamamlanamadı.');error.code=status.result?.error?.code;throw error;}
-   return status.result.data;
-  }
- }
- throw Error('Arka plan aktarımından sonuç alınamadı. Tamamlanan parçalar korunur. Aynı dosyayla yeniden deneyin.');
-}
-async function rpc(action,payload={},direct=false){
- if(!window.streamlitPanel&&!direct&&!hasGAS&&BACKGROUND_IMPORT_ACTIONS.has(action))return backgroundImportRpc(action,payload);
+async function rpc(action,payload={}){
  busy(true);
  try{
-  
-  const req={action,token:state.token,payload};let result;
-  if(window.streamlitPanel){result=await window.streamlitPanel(req);}
-  else if(hasGAS){result=await new Promise((resolve,reject)=>google.script.run.withSuccessHandler(resolve).withFailureHandler(()=>reject(new Error('Sunucuya ulaşılamadı. Lütfen yeniden deneyin.'))).api(req));}
-  else{
-   let response;
-   try{response=await fetch('/.netlify/functions/api',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(req),cache:'no-store',signal:AbortSignal.timeout(65000)});}
-   catch(cause){const e=new Error(cause?.name==='TimeoutError'||cause?.name==='AbortError'?'İstek zaman aşımına uğradı. Tekrar deneyin.':'Sunucuya ulaşılamadı. Bağlantınızı kontrol edip yeniden deneyin.');e.code='TRANSPORT_ERROR';throw e;}
-   try{result=await response.json()}catch{const e=new Error([502,503,504].includes(response.status)?'Sunucu raporu zamanında tamamlayamadı. Tekrar deneyin.':'Netlify API yanıtı okunamadı. Functions yayınının tamamlandığını kontrol edin.');e.code=[502,503,504].includes(response.status)?'REPORT_TIMEOUT':'INVALID_RESPONSE';throw e;}
-   if(!response.ok&&result?.ok!==false){const e=new Error([502,503,504].includes(response.status)?'Rapor isteği tamamlanamadı. Tekrar deneyin veya filtrelerden tarih aralığını daraltın.':'Sunucu isteği tamamlanamadı. Lütfen yeniden deneyin.');e.code='REPORT_TIMEOUT';throw e;}
-  }
+  const result=await window.streamlitPanel({action,token:state.token,payload});
   if(!result?.ok){const e=new Error(result?.error?.message||'İşlem tamamlanamadı.');e.code=result?.error?.code;if(['UNAUTHORIZED','SESSION_EXPIRED','AUTH_REQUIRED'].includes(e.code)&&state.token){leaveApp();toast('Oturumunuz sona erdi. Yeniden giriş yapın.',true)}throw e;}
   const release=Number(/r(\d+)$/.exec(result.apiVersion||'')?.[1]||0);
   if((action==='bootstrap'||action==='analytics')&&release<20){const e=new Error('Apps Script’in yayındaki sürümü eski. Güncel Code.gs dosyasını kaydedip Dağıt → Dağıtımları yönet → Düzenle → Yeni sürüm → Dağıt adımlarını uygulayın.');e.code='BACKEND_OUTDATED';throw e;}
